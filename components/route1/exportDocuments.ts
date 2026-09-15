@@ -7,6 +7,8 @@ import {
   ROOT_CAUSES,
   SIGNALS,
   areaById,
+  bucketFor,
+  bucketLabel,
 } from "@/lib/route1";
 import type { Route1State } from "./useRoute1";
 
@@ -99,6 +101,7 @@ export function buildEngagementJson(r1: Route1State, filename: string): string {
     partTwo: {
       label: EXPORT.partTwo,
       level: 2,
+      revealed: r1.revealedAll,
       measures: r1.measureStates.map((s) => ({
         id: s.measure.id,
         name: s.measure.name,
@@ -106,23 +109,23 @@ export function buildEngagementJson(r1: Route1State, filename: string): string {
         situationalText:
           s.measure.situational.options.find((o) => o.id === s.situational)?.text ?? null,
         situationalCorrect: s.situationalCorrect,
-        revealed: s.revealed,
-        dimensions: DIMENSIONS.map((d) => ({
-          key: d.key,
-          name: d.name,
-          higherIsWorse: !!d.inverted,
-          prediction: s.prediction[d.key] ?? null,
-          groundTruth: s.measure.profile[d.key],
-          gap: s.prediction[d.key] ? s.measure.profile[d.key] - s.prediction[d.key]! : null,
-        })),
-        meanAbsoluteGap: (() => {
-          const gaps = DIMENSIONS.map((d) =>
-            s.prediction[d.key] ? Math.abs(s.measure.profile[d.key] - s.prediction[d.key]!) : null,
-          ).filter((g): g is number => g !== null);
-          return gaps.length
-            ? Number((gaps.reduce((a, b) => a + b, 0) / gaps.length).toFixed(2))
-            : null;
-        })(),
+        dimensions: DIMENSIONS.map((d) => {
+          const predicted = s.predictions[d.key] ?? null;
+          const groundTruth = s.measure.profile[d.key];
+          const groundTruthBucket = bucketFor(groundTruth);
+          return {
+            key: d.key,
+            name: d.name,
+            higherIsWorse: !!d.inverted,
+            predictedBucket: predicted,
+            groundTruth,
+            groundTruthBucket,
+            correct: predicted ? predicted === groundTruthBucket : null,
+          };
+        }),
+        hitCount: DIMENSIONS.filter(
+          (d) => s.predictions[d.key] && s.predictions[d.key] === bucketFor(s.measure.profile[d.key]),
+        ).length,
       })),
       commit: {
         pick: r1.pick,
@@ -187,16 +190,17 @@ export function buildEngagementHtml(r1: Route1State): string {
         : "Situational question not answered."
     }</p>
     <table>
-      <thead><tr><th>Dimension</th><th class="num">Predicted</th><th class="num">Real</th><th class="num">Gap</th></tr></thead>
+      <thead><tr><th>Dimension</th><th class="num">Predicted</th><th class="num">Real</th><th class="num">Match</th></tr></thead>
       <tbody>${DIMENSIONS.map((d) => {
-        const p = s.prediction[d.key];
+        const predicted = s.predictions[d.key] ?? null;
         const actual = s.measure.profile[d.key];
-        const gap = p ? actual - p : null;
+        const actualBucket = bucketFor(actual);
+        const match = predicted ? predicted === actualBucket : null;
         return `<tr>
           <td>${esc(d.name)}${d.inverted ? ' <span class="warn" title="higher is worse">&#9650;</span>' : ""}</td>
-          <td class="num">${p ?? "—"}</td>
-          <td class="num">${s.revealed ? actual : "—"}</td>
-          <td class="num">${gap === null || !s.revealed ? "—" : gap > 0 ? `+${gap}` : gap}</td>
+          <td class="num">${esc(bucketLabel(predicted))}</td>
+          <td class="num">${r1.revealedAll ? `${actual} (${esc(bucketLabel(actualBucket))})` : "—"}</td>
+          <td class="num">${r1.revealedAll && match !== null ? (match ? "✓" : "✕") : "—"}</td>
         </tr>`;
       }).join("")}</tbody>
     </table>`,

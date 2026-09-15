@@ -416,3 +416,31 @@ to what the learner actually did) and a horizon split from the two escalated dee
 naming which two were escalated.
 
 Canonical wording: `../CLAUDE.md` §13.
+
+## 14. Part 2's prediction grid — one shared grid, not three tab-gated forms — new in Day 11
+
+**Why:** each of the three measures had its own tab with its own 7-slider prediction form and
+its own Reveal — 21 slider drags across three re-orientations. Real completion time (per the
+user testing it) ran long, and comparing measure A to measure C required holding one tab's
+numbers in memory while looking at another.
+
+**Shape:**
+
+- `SituationalBlock.tsx` — all three situational questions shown together (not tab-gated), one
+  continuous scroll instead of three tab visits.
+- `PredictionGrid.tsx` — one 7×3 table, dimensions as rows, measures as columns. Each cell is a
+  click-to-cycle button (`nextBucket` in `lib/route1/partTwo.ts`): blank → Low → Mid → High →
+  blank. `bucketFor(value)` buckets the real 1–10 profile the same way (1–3/4–7/8–10) so a
+  predicted bucket and the real one compare directly.
+- One Reveal action (`R1.revealed`, a single `toggleCheck` flag, not one per measure) colours
+  every cell at once — accent for a match, warn for a miss — and a gap summary below groups
+  misses by measure, reusing the same `measure.reveal[dimKey]` reasoning sentences the old
+  per-tab gap list used.
+- `MeasureState.predictions` is now `Partial<Record<DimensionKey, Bucket>>`, not numeric.
+  `useRoute1.ts` computes `revealedAll`, `gapCells`/`missedCells` (only populated once revealed),
+  and one combined missing-list entry for the whole grid instead of per-measure entries.
+
+`MeasurePanel.tsx` (the old per-measure tabbed form) is deleted. `CommitPanel.tsx`'s per-option
+"not yet compared" badge is replaced with one line above the picker, gated on `r1.revealedAll`.
+
+Canonical wording: `../CLAUDE.md` §14.

@@ -80,11 +80,14 @@ the triage and for which pair is worth escalating) live in `lib/route1/partOne.t
 ("3 measurement gaps, 3 architecture decisions"), which two they escalated and the horizon split
 across those, two SVG split bars, and one carried line of teaching.
 
-**Part 2 — Decide.** Five constraints stated once, then three measures as tabs (A expand
-monitoring, B architecture review, C targeted optimisation). Per measure: a situational question
-with explanatory feedback on every option; seven 1–10 prediction sliders drawing a dashed polygon
-live; Reveal fades the solid ground truth in over it (600 ms) and lists every dimension where the
-gap is three or more, with the reasoning behind the real value. The ground truth is built so no
+**Part 2 — Decide, one continuous pass.** Five constraints stated once, then all three
+situational questions shown together (A expand monitoring, B architecture review, C targeted
+optimisation) — not tab-gated, so there's no re-orientation cost between them. Then one shared
+7×3 prediction grid: dimensions as rows, measures as columns, each cell a click-to-cycle
+Low/Mid/High button instead of a slider drag, so predicting all three side by side is a
+comparison, not three separate exercises. One Reveal action colours every cell (accent = match,
+warn = miss) against the real profile bucketed the same way, and a gap summary below groups the
+misses by measure with the reasoning behind the real value. The ground truth is built so no
 option dominates. Then the commit: three radio cards, strategic rationale, feasibility argument,
 two follow-up decisions, two risks of the road not taken. The mentor key gives the curriculum model
 answer (A coupled to a following architecture review) and states that a defended B or C is not
@@ -92,9 +95,10 @@ marked wrong.
 
 **Export.** One JSON with `meta` (day, route, levels `[1,2]`, schema version), `partOne` (`triage`
 — all six rows plus check/clue/reveal metadata, `escalation` — the two chosen signal ids and the
-justification, `analysis` — the deep-dive workup on those two, and a `tally`) and `partTwo` (per
-measure: situational answer and correctness, prediction, ground truth, gaps, reveal state; plus the
-commit). One print-ready HTML report with a banner per part.
+justification, `analysis` — the deep-dive workup on those two, and a `tally`) and `partTwo`
+(`revealed`, and per measure: situational answer and correctness, and per dimension
+`predictedBucket` / `groundTruth` / `groundTruthBucket` / `correct`, plus the commit). One
+print-ready HTML report with a banner per part.
 
 ## Route 2 — Management Decision (MetricFlow → NexLayer)
 

@@ -34,10 +34,14 @@ export function CommitPanel() {
       <div id={domId.pick} className="scroll-mt-24">
         <p className="text-caption font-semibold text-ink">{COMMIT.pick.label}</p>
         <p className="mt-0.5 text-micro text-ash">{COMMIT.pick.instruction}</p>
+        {!r1.revealedAll && (
+          <p className="mt-1.5 rounded-lg bg-warn/10 px-2.5 py-1.5 text-micro text-warn">
+            Reveal the profiles above before committing — a pick made blind isn't a decision yet.
+          </p>
+        )}
         <div className="mt-2 grid gap-2 md:grid-cols-3">
           {MEASURES.map((m) => {
             const on = r1.pick === m.id;
-            const revealed = r1.measureStateById(m.id).revealed;
             return (
               <button
                 key={m.id}
@@ -49,15 +53,8 @@ export function CommitPanel() {
                   on ? "border-accent bg-accentSoft" : "border-line bg-canvas hover:border-ash",
                 )}
               >
-                <span className="flex items-center justify-between gap-2">
-                  <span className={clsx("text-caption font-semibold", on ? "text-accent" : "text-ink")}>
-                    Measure {m.id}
-                  </span>
-                  {!revealed && (
-                    <span className="rounded-full border border-line px-1.5 py-0.5 text-micro text-ash">
-                      not yet compared
-                    </span>
-                  )}
+                <span className={clsx("text-caption font-semibold", on ? "text-accent" : "text-ink")}>
+                  Measure {m.id}
                 </span>
                 <span className="mt-1 block text-caption text-ink">{m.shortName}</span>
               </button>
@@ -144,28 +141,25 @@ export function CommitPanel() {
                     {d.name}
                     {d.inverted && <span className="ml-1 text-warn">▲</span>}
                   </td>
-                  {MEASURES.map((m) => {
-                    const revealed = r1.measureStateById(m.id).revealed;
-                    return (
-                      <td
-                        key={m.id}
-                        className={clsx(
-                          "py-1 text-center tabular-nums",
-                          r1.pick === m.id ? "font-semibold text-accent" : "text-ink",
-                        )}
-                      >
-                        {revealed ? m.profile[d.key] : "—"}
-                      </td>
-                    );
-                  })}
+                  {MEASURES.map((m) => (
+                    <td
+                      key={m.id}
+                      className={clsx(
+                        "py-1 text-center tabular-nums",
+                        r1.pick === m.id ? "font-semibold text-accent" : "text-ink",
+                      )}
+                    >
+                      {r1.revealedAll ? m.profile[d.key] : "—"}
+                    </td>
+                  ))}
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
         <p className="mt-1.5 text-micro text-ash">
-          <span className="text-warn">▲</span> Higher is worse. A dash means you have not revealed that
-          measure yet.
+          <span className="text-warn">▲</span> Higher is worse. A dash means you have not revealed the
+          profiles yet.
         </p>
       </details>
 

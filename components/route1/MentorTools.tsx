@@ -4,13 +4,14 @@ import { useProgress } from "@/lib/store";
 import { MentorFillButton } from "@/components/ui/MentorFillButton";
 import { AnswerKeyButton } from "@/components/ui/AnswerKeyButton";
 import {
+  BUCKETS,
   COMMIT,
   DIMENSIONS,
   ESCALATE,
   MEASURES,
-  PREDICT_MAX,
   R1,
   SIGNALS,
+  bucketFor,
 } from "@/lib/route1";
 
 /**
@@ -28,7 +29,7 @@ import {
 export function MentorTools() {
   const setNote = useProgress((s) => s.setNote);
   const choose = useProgress((s) => s.choose);
-  const markSeen = useProgress((s) => s.markSeen);
+  const toggleCheck = useProgress((s) => s.toggleCheck);
 
   const fill = () => {
     setNote(R1.name, "Muchson");
@@ -57,26 +58,28 @@ export function MentorTools() {
     }
 
     // -- Part 2: the three measures --------------------------------------------
-    // Predictions are deliberately *offset* from ground truth rather than equal
-    // to it: the point of the reveal is the ghost-versus-real gap, and a fill
-    // that matched perfectly would leave a mentor demonstrating a feature that
-    // renders as a single polygon.
-    const offsets: Record<string, number> = { A: 2, B: -3, C: 3 };
+    // One dimension per measure is deliberately mispredicted (shifted one
+    // bucket) rather than every cell matching exactly: the point of Reveal is
+    // the predicted-vs-real gap, and a fill with zero misses would leave a
+    // mentor demonstrating a feature that never shows the warn-coloured cells.
+    const deliberateMiss: Record<string, string> = { A: "risk", B: "feasibility", C: "longterm" };
+    const bucketIds = BUCKETS.map((b) => b.id);
 
     for (const m of MEASURES) {
       const correct = m.situational.options.find((o) => o.correct) ?? m.situational.options[0];
       choose(R1.situational(m.id), correct.id);
-      const shift = offsets[m.id] ?? 2;
-      DIMENSIONS.forEach((d, i) => {
-        // Alternate the direction so the ghost polygon crosses the real one.
-        const delta = i % 2 === 0 ? shift : -shift;
-        const guess = Math.max(1, Math.min(PREDICT_MAX, m.profile[d.key] + delta));
-        choose(R1.predict(m.id, d.key), String(guess));
-      });
-      markSeen(R1.revealed, m.id);
+      for (const d of DIMENSIONS) {
+        const actual = bucketFor(m.profile[d.key]);
+        if (d.key === deliberateMiss[m.id]) {
+          const wrong = bucketIds.find((b) => b !== actual)!;
+          choose(R1.predict(m.id, d.key), wrong);
+        } else {
+          choose(R1.predict(m.id, d.key), actual);
+        }
+      }
     }
+    toggleCheck(R1.revealed, true);
 
-    choose(R1.tab, "A");
     choose(R1.pick, "A");
     setNote(R1.rationale, COMMIT.rationale.sample);
     setNote(R1.feasibility, COMMIT.feasibility.sample);

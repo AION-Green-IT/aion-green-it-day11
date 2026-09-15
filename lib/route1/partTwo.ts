@@ -1,11 +1,20 @@
 /**
  * Part 2 — Decide. Level 2, ~15 minutes.
  *
- * Three competing measures under a fixed constraint set. Per measure the
- * learner answers a situational question first (so the prediction is reasoned
- * rather than guessed), predicts a seven-dimension profile, then reveals the
- * real one. The gap between the dashed prediction and the solid truth is the
- * teaching material; there is no score.
+ * Three competing measures under a fixed constraint set, worked as one
+ * continuous pass rather than three repeated per-measure cycles:
+ *
+ *  1. All three situational questions, shown together (not tab-gated) — each
+ *     still tests something specific to that measure, so the learner reasons
+ *     about each before predicting, but there is no re-orientation cost from
+ *     switching tabs three times.
+ *  2. One shared 7×3 grid (dimension × measure). Each cell click-cycles
+ *     through Low / Mid / High — a single tap, not a slider drag — and having
+ *     all three measures side by side makes the comparison the exercise is
+ *     actually about easier, not harder.
+ *  3. One Reveal action for the whole grid. The gap between a predicted
+ *     bucket and the real one (bucketed the same way) is the teaching
+ *     material; there is no score.
  */
 
 import type { AnswerKeyBlock } from "@/lib/answerKey";
@@ -116,10 +125,41 @@ export const DIMENSIONS: Dimension[] = [
 export const dimensionByKey = (key: DimensionKey): Dimension =>
   DIMENSIONS.find((d) => d.key === key)!;
 
-/** Axis set for the radar. */
+/** Axis set for the radar (kept for the material's own trade-off pentagon, S4). */
 export const RADAR_AXES = DIMENSIONS.map((d) => ({ key: d.key, label: d.label, full: d.name }));
 
 export const PREDICT_MAX = 10;
+
+// ---------------------------------------------------------------------------
+// Buckets — the prediction unit for the shared grid
+// ---------------------------------------------------------------------------
+
+export type Bucket = "low" | "mid" | "high";
+
+export const BUCKETS: { id: Bucket; label: string; letter: string }[] = [
+  { id: "low", label: "Low", letter: "L" },
+  { id: "mid", label: "Mid", letter: "M" },
+  { id: "high", label: "High", letter: "H" },
+];
+
+export const bucketLabel = (b: Bucket | null): string => (b ? BUCKETS.find((x) => x.id === b)!.label : "—");
+export const bucketLetter = (b: Bucket | null): string => (b ? BUCKETS.find((x) => x.id === b)!.letter : "·");
+
+/** Cycles blank → Low → Mid → High → blank, for a single tap per cell. */
+const BUCKET_CYCLE: (Bucket | null)[] = [null, "low", "mid", "high"];
+export const nextBucket = (current: Bucket | null): Bucket | null =>
+  BUCKET_CYCLE[(BUCKET_CYCLE.indexOf(current) + 1) % BUCKET_CYCLE.length];
+
+/**
+ * Maps a real 1–10 profile value onto the same three-bucket scale a
+ * prediction uses, so a predicted bucket and the real one are directly
+ * comparable. 1–3 Low, 4–7 Mid, 8–10 High.
+ */
+export function bucketFor(value: number): Bucket {
+  if (value <= 3) return "low";
+  if (value <= 7) return "mid";
+  return "high";
+}
 
 // ---------------------------------------------------------------------------
 // The three measures
@@ -518,12 +558,17 @@ export const PART_TWO = {
   title: "One quarter, three measures, one funded",
   minutes: 15,
   framing:
-    "Management will fund exactly one of these three lines of measures. For each one: answer the situational question, predict its profile across the seven decision dimensions, then reveal the real profile — the gap between your dashed prediction and the solid truth is the part worth reading. Work them in any order, compare as often as you like, then commit to one and defend it, including the two risks of the road you did not take.",
+    "Management will fund exactly one of these three lines of measures. Answer all three situational questions below, then predict where each measure lands on the seven decision dimensions — one shared grid, tap Low, Mid or High per cell, all three measures side by side so you can compare as you go. Reveal once to see the real profiles against your predictions, then commit to one and defend it, including the two risks of the road you did not take.",
+  situationalHeading: "Read all three before you predict",
+  situationalIntro: "One question per measure — each tests something specific to that option.",
+  predictHeading: "Predict all three, one grid",
   predictInstruction:
-    "Set all seven before you reveal — the overlay only means something if there is a guess to compare it against.",
-  revealLabel: "Reveal the real profile",
-  revealedLabel: "Real profile revealed",
-  invertedNote: "Risk is inverted — on this axis a larger value is worse.",
-  gapHeading: "Where your prediction and the real profile differ most",
-  gapEmpty: "Your prediction was within two points on every dimension. Read the profile notes anyway — the reasoning matters more than the numbers.",
+    "Tap a cell to cycle Low → Mid → High. Set what you can across all 21 cells before you reveal — the comparison only means something if there is a guess behind it.",
+  revealLabel: "Reveal all three profiles",
+  revealedLabel: "Profiles revealed",
+  invertedNote: "Risk is inverted — on that row, High is worse, not better.",
+  gapHeading: "Where your predictions and the real profiles differ",
+  gapEmpty: "Every prediction you set landed in the right bucket. Read the reasoning below anyway — the reasoning matters more than getting the bucket right.",
+  gapNone: "You haven't predicted anything yet — set some cells above, then reveal.",
+  allReasoningLabel: "See the reasoning behind every cell, all three measures",
 };

@@ -64,17 +64,18 @@ export const R1 = {
 
   // -- Part 2: decide -------------------------------------------------------
   situational: (measureId: string) => `r1:sit:${measureId}`,
-  /** One key per predicted dimension. Stored as a stringified 1–10; 0 = not set. */
+  /** One key per dimension per measure. Stored as "low" | "mid" | "high"; unset = not predicted. */
   predict: (measureId: string, dimKey: string) => `r1:pred:${measureId}:${dimKey}`,
-  /** markSeen bucket: measures whose real profile has been revealed. */
+  /**
+   * toggleCheck: the whole 7×3 grid has been revealed. One flag, not one per
+   * measure — there is one Reveal action for all three now, not three.
+   */
   revealed: "r1:revealed",
   pick: "r1:pick",
   rationale: "r1:rationale",
   feasibility: "r1:feasibility",
   followUp: (n: 1 | 2) => `r1:followup:${n}`,
   risk: (n: 1 | 2) => `r1:risk:${n}`,
-  /** Which measure tab is open — persisted so a missing-item click can open it first. */
-  tab: "r1:tab",
 } as const;
 
 /** Prefixes resetSection() must sweep to clear every compound key this route writes. */
@@ -88,12 +89,12 @@ export const R1_KEY_PREFIXES = [
   "r1:clues",
   "r1:sit:",
   "r1:pred:",
+  "r1:revealed",
   "r1:pick",
   "r1:rationale",
   "r1:feasibility",
   "r1:followup:",
   "r1:risk:",
-  "r1:tab",
 ];
 
 export const PAGE_INTRO = {

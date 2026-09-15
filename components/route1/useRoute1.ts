@@ -9,8 +9,10 @@ import {
   R1,
   SIGNALS,
   areaById,
+  bucketFor,
   measureById,
   type AreaId,
+  type Bucket,
   type DimensionKey,
   type Horizon,
   type Measure,
@@ -45,10 +47,9 @@ export const domId = {
 
   // Part 2
   partTwo: "part-2",
-  measure: (id: MeasureId) => `r1-measure-${id}`,
-  situational: (id: MeasureId) => `r1-measure-${id}-situational`,
-  predict: (id: MeasureId) => `r1-measure-${id}-predict`,
-  reveal: (id: MeasureId) => `r1-measure-${id}-reveal`,
+  situational: (id: MeasureId) => `r1-situational-${id}`,
+  predictGrid: "r1-predict-grid",
+  revealAction: "r1-reveal-action",
   commit: "r1-commit",
   pick: "r1-commit-pick",
   rationale: "r1-commit-rationale",
@@ -96,11 +97,22 @@ export type MeasureState = {
   measure: Measure;
   situational: string | null;
   situationalCorrect: boolean;
-  prediction: Partial<Record<DimensionKey, number>>;
+  /** Dimension key → predicted bucket. Absent means not set. */
+  predictions: Partial<Record<DimensionKey, Bucket>>;
   predictedCount: number;
   predictionComplete: boolean;
   missingDimensions: string[];
-  revealed: boolean;
+};
+
+/** One cell of the shared 7×3 grid, post-reveal. */
+export type GapCell = {
+  measure: Measure;
+  dimension: DimensionKey;
+  predicted: Bucket | null;
+  actualValue: number;
+  actualBucket: Bucket;
+  /** A miss is a set prediction whose bucket doesn't match the real one — never true for an unset cell. */
+  miss: boolean;
 };
 
 /**
@@ -117,8 +129,6 @@ export function useRoute1() {
   const notes = useProgress((s) => s.notes);
   const choices = useProgress((s) => s.choices);
   const checks = useProgress((s) => s.checks);
-  const seen = useProgress((s) => s.seen);
-  const choose = useProgress((s) => s.choose);
 
   const name = notes[R1.name] ?? "";
 
@@ -201,18 +211,15 @@ export function useRoute1() {
   const analysisCompleteCount = analyses.filter((a) => a.complete).length;
 
   // -- Part 2 -------------------------------------------------------------
-  const revealedIds = seen[R1.revealed] ?? [];
-  const rawTab = choices[R1.tab];
-  const activeMeasure: MeasureId =
-    rawTab === "A" || rawTab === "B" || rawTab === "C" ? (rawTab as MeasureId) : "A";
+  // One flag for the whole 7×3 grid — one Reveal action, not one per measure.
+  const revealedAll = checks[R1.revealed] === true;
 
   const measureStates: MeasureState[] = MEASURES.map((measure) => {
-    const prediction: Partial<Record<DimensionKey, number>> = {};
+    const predictions: Partial<Record<DimensionKey, Bucket>> = {};
     const missingDimensions: string[] = [];
     for (const d of DIMENSIONS) {
       const raw = choices[R1.predict(measure.id, d.key)];
-      const v = raw ? Number(raw) : 0;
-      if (v >= 1) prediction[d.key] = v;
+      if (raw === "low" || raw === "mid" || raw === "high") predictions[d.key] = raw;
       else missingDimensions.push(d.name);
     }
     const situational = choices[R1.situational(measure.id)] || null;
@@ -220,17 +227,39 @@ export function useRoute1() {
       measure,
       situational,
       situationalCorrect: !!measure.situational.options.find((o) => o.id === situational)?.correct,
-      prediction,
+      predictions,
       predictedCount: DIMENSIONS.length - missingDimensions.length,
       predictionComplete: missingDimensions.length === 0,
       missingDimensions,
-      revealed: revealedIds.includes(measure.id),
     };
   });
 
   const measureStateById = (id: MeasureId) => measureStates.find((m) => m.measure.id === id)!;
-  const revealedCount = measureStates.filter((m) => m.revealed).length;
-  const allRevealed = revealedCount === MEASURES.length;
+  const totalPredicted = measureStates.reduce((n, m) => n + m.predictedCount, 0);
+  const totalCells = MEASURES.length * DIMENSIONS.length;
+  const allPredicted = totalPredicted === totalCells;
+  /** For the export bar's existing "N of 3 measures compared" readout. */
+  const revealedCount = revealedAll ? MEASURES.length : 0;
+
+  /** Every set prediction, revealed or not — the grid needs this to colour cells even before Reveal is pressed. */
+  const gapCells: GapCell[] = revealedAll
+    ? measureStates.flatMap((m) =>
+        DIMENSIONS.filter((d) => m.predictions[d.key]).map((d) => {
+          const predicted = m.predictions[d.key]!;
+          const actualValue = m.measure.profile[d.key];
+          const actualBucket = bucketFor(actualValue);
+          return {
+            measure: m.measure,
+            dimension: d.key,
+            predicted,
+            actualValue,
+            actualBucket,
+            miss: predicted !== actualBucket,
+          };
+        }),
+      )
+    : [];
+  const missedCells = gapCells.filter((c) => c.miss);
 
   const rawPick = choices[R1.pick];
   const pick: MeasureId | null =
@@ -249,8 +278,6 @@ export function useRoute1() {
 
   // -- Missing list ---------------------------------------------------------
   // Standard #1: one entry per concretely-missing thing, named, in page order.
-  const openTab = (id: MeasureId) => () => choose(R1.tab, id);
-
   const missingPartOne: MissingItem[] = [];
   for (const t of triage) {
     if (t.complete) continue;
@@ -278,29 +305,22 @@ export function useRoute1() {
 
   const missingPartTwo: MissingItem[] = [];
   for (const m of measureStates) {
-    const who = `Measure ${m.measure.id} — ${m.measure.shortName}`;
     if (!m.situational) {
       missingPartTwo.push({
         id: domId.situational(m.measure.id),
-        label: `Situational question for ${who}`,
-        before: openTab(m.measure.id),
+        label: `Situational question for Measure ${m.measure.id} — ${m.measure.shortName}`,
       });
     }
-    if (!m.predictionComplete) {
-      const n = m.missingDimensions.length;
-      missingPartTwo.push({
-        id: domId.predict(m.measure.id),
-        label: `Prediction for ${who} — ${n} dimension${n === 1 ? "" : "s"} not set (${m.missingDimensions.join(", ")})`,
-        before: openTab(m.measure.id),
-      });
-    }
-    if (!m.revealed) {
-      missingPartTwo.push({
-        id: domId.reveal(m.measure.id),
-        label: `Reveal the real profile for ${who}`,
-        before: openTab(m.measure.id),
-      });
-    }
+  }
+  if (!allPredicted) {
+    const unset = totalCells - totalPredicted;
+    missingPartTwo.push({
+      id: domId.predictGrid,
+      label: `Prediction grid — ${unset} of ${totalCells} cells not set`,
+    });
+  }
+  if (!revealedAll) {
+    missingPartTwo.push({ id: domId.revealAction, label: "Reveal all three profiles" });
   }
   if (!pick) {
     missingPartTwo.push({ id: domId.pick, label: "Your recommendation — pick one measure to commit to" });
@@ -357,10 +377,14 @@ export function useRoute1() {
     // Part 2
     measureStates,
     measureStateById,
-    activeMeasure,
+    revealedAll,
     revealedCount,
-    allRevealed,
     totalMeasures: MEASURES.length,
+    totalPredicted,
+    totalCells,
+    allPredicted,
+    gapCells,
+    missedCells,
     pick,
     pickedMeasure: pick ? measureById(pick) : null,
     rationale,
