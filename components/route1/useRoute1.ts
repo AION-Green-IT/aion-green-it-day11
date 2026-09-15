@@ -4,6 +4,7 @@ import { useProgress, useHydrated } from "@/lib/store";
 import type { MissingItem } from "@/components/ui/MissingList";
 import {
   DIMENSIONS,
+  ESCALATE,
   MEASURES,
   R1,
   SIGNALS,
@@ -22,13 +23,23 @@ import {
 export const domId = {
   name: "r1-name",
 
-  // Part 1
+  // Part 1 — Step 1: triage
   partOne: "part-1",
-  signal: (id: string) => `r1-signal-${id}`,
-  area: (id: string) => `r1-signal-${id}-area`,
-  rootCause: (id: string) => `r1-signal-${id}-root`,
-  horizon: (id: string) => `r1-signal-${id}-horizon`,
-  approach: (id: string) => `r1-signal-${id}-approach`,
+  triage: "r1-triage",
+  triageRow: (id: string) => `r1-triage-${id}`,
+  triageEvidence: (id: string) => `r1-triage-${id}-evidence`,
+  triageTag: (id: string) => `r1-triage-${id}-tag`,
+  triageCheck: "r1-triage-check",
+
+  // Part 1 — Step 2: escalate
+  escalate: "r1-escalate",
+  escalateWhy: "r1-escalate-why",
+
+  // Part 1 — Step 3: deep dive (reuses one id shape per signal)
+  analysis: (id: string) => `r1-analysis-${id}`,
+  area: (id: string) => `r1-analysis-${id}-area`,
+  horizon: (id: string) => `r1-analysis-${id}-horizon`,
+  approach: (id: string) => `r1-analysis-${id}-approach`,
 
   handover: "r1-handover",
 
@@ -48,15 +59,36 @@ export const domId = {
   export: "r1-export",
 };
 
-export type Finding = {
+// ---------------------------------------------------------------------------
+// Step 1 — triage
+// ---------------------------------------------------------------------------
+
+export type TriageRowState = {
   signal: Signal;
+  tag: RootCause | null;
+  /** Index into signal.segments of the tapped phrase, or null. */
+  evidence: number | null;
+  evidenceText: string | null;
+  complete: boolean;
+  /** Ground truth — tag correct and the tapped phrase is the decisive one. Only ever surfaced when reasoning is visible. */
+  holds: boolean;
+};
+
+// ---------------------------------------------------------------------------
+// Step 3 — deep dive
+// ---------------------------------------------------------------------------
+
+export type Analysis = {
+  signal: Signal;
+  triage: TriageRowState;
   area: AreaId | null;
-  rootCause: RootCause | null;
   horizon: Horizon | null;
   approach: string;
-  checkAttempts: number;
-  clueUsed: boolean;
-  /** All four answers present — a finished line in Part 1 of the report. */
+  checks: number;
+  fresh: boolean;
+  verdict: "holds" | "wrong" | null;
+  revealed: boolean;
+  reasoningVisible: boolean;
   complete: boolean;
 };
 
@@ -74,63 +106,101 @@ export type MeasureState = {
 /**
  * Joins the shared progress store to Route 1's content — both parts, one hook.
  *
- * One route has one `missing` list and one definition of done (CLAUDE.md #12),
- * because one export button at the bottom has to be able to point at any gap
- * anywhere above it. Entries that live inside a collapsed signal card or a
- * hidden measure tab carry a `before` callback that opens the right container
- * first, so a missing item can never be a dead click.
+ * One route has one `missing` list and one definition of done (CLAUDE.md #12).
+ * Part 1's own checks (triage, then per-signal deep dive) are set/pair-level so
+ * neither one ever names which specific answer is wrong — only how many hold —
+ * and both open onto a "show the reasoning" option after two genuine checks,
+ * which is recorded in the export.
  */
 export function useRoute1() {
   const hydrated = useHydrated();
   const notes = useProgress((s) => s.notes);
   const choices = useProgress((s) => s.choices);
+  const checks = useProgress((s) => s.checks);
   const seen = useProgress((s) => s.seen);
   const choose = useProgress((s) => s.choose);
 
   const name = notes[R1.name] ?? "";
 
-  // -- Part 1 ---------------------------------------------------------------
-  const cluesUsed = seen[R1.clues] ?? [];
-  const processedOrder = seen[R1.processed] ?? [];
-
-  const findings: Finding[] = SIGNALS.map((signal) => {
-    const rawArea = choices[R1.area(signal.id)];
-    const rawRoot = choices[R1.rootCause(signal.id)];
-    const rawHorizon = choices[R1.horizon(signal.id)];
-    const approach = (notes[R1.approach(signal.id)] ?? "").trim();
-    const area = rawArea ? (rawArea as AreaId) : null;
-    const rootCause =
-      rawRoot === "measurement" || rawRoot === "architecture" ? (rawRoot as RootCause) : null;
-    const horizon = rawHorizon === "short" || rawHorizon === "structural" ? (rawHorizon as Horizon) : null;
+  // -- Step 1: triage ---------------------------------------------------------
+  const triage: TriageRowState[] = SIGNALS.map((signal) => {
+    const rawTag = choices[R1.triageTag(signal.id)];
+    const tag = rawTag === "measurement" || rawTag === "architecture" ? (rawTag as RootCause) : null;
+    const rawEv = choices[R1.triageEvidence(signal.id)];
+    const evidence = rawEv !== undefined && rawEv !== "" ? Number(rawEv) : null;
+    const seg = evidence !== null ? signal.segments[evidence] : null;
+    const evidenceText = seg && typeof seg !== "string" ? seg.text : null;
+    const decisive = seg && typeof seg !== "string" ? seg.decisive : false;
     return {
       signal,
-      area,
-      rootCause,
-      horizon,
-      approach,
-      checkAttempts: Number(notes[R1.checks(signal.id)] ?? "0") || 0,
-      clueUsed: cluesUsed.includes(signal.id),
-      complete: !!area && !!rootCause && !!horizon && approach.length > 0,
+      tag,
+      evidence,
+      evidenceText,
+      complete: !!tag && evidence !== null,
+      holds: tag === signal.rootCause && decisive,
     };
   });
 
-  const findingById = (id: string) => findings.find((f) => f.signal.id === id)!;
+  const triageById = (id: string) => triage.find((t) => t.signal.id === id)!;
+  const triageCompleteCount = triage.filter((t) => t.complete).length;
+  const triageSignature = triage.map((t) => `${t.signal.id}:${t.tag ?? "-"}:${t.evidence ?? "-"}`).join("|");
 
-  /** Report lines in the order the learner first assigned an area to them. */
-  const reportRows = [
-    ...processedOrder.filter((id) => findings.find((f) => f.signal.id === id)?.area).map(findingById),
-    ...findings.filter((f) => f.area && !processedOrder.includes(f.signal.id)),
-  ];
+  const triageChecks = Number(notes[R1.triageChecks] ?? "0") || 0;
+  const triageLastSig = notes[R1.triageLastSig] ?? "";
+  const triageLastOk = Number(notes[R1.triageLastOk] ?? "0") || 0;
+  const triageFresh = triageChecks > 0 && triageLastSig === triageSignature;
+  const triageAllHold = triageFresh && triageLastOk === SIGNALS.length;
+  const triageClue = checks[R1.triageClue] === true;
+  const triageRevealed = checks[R1.triageReveal] === true;
+  const triageRevealAt = Number(notes[R1.triageRevealAt] ?? "0") || 0;
+  const triageReasoningVisible = triageAllHold || triageRevealed;
 
-  const assignedCount = findings.filter((f) => f.area).length;
-  const completeCount = findings.filter((f) => f.complete).length;
-  const areaCorrectCount = findings.filter((f) => f.area === f.signal.area).length;
-  const measurementCount = findings.filter((f) => f.complete && f.rootCause === "measurement").length;
-  const architectureCount = findings.filter((f) => f.complete && f.rootCause === "architecture").length;
-  const shortCount = findings.filter((f) => f.complete && f.horizon === "short").length;
-  const structuralCount = findings.filter((f) => f.complete && f.horizon === "structural").length;
+  // -- Step 2: escalate ---------------------------------------------------------
+  const escalated = (notes[R1.escalate] ?? "")
+    .split("|")
+    .filter((id) => SIGNALS.some((s) => s.id === id))
+    .slice(0, ESCALATE.limit);
+  const escalateWhy = (notes[R1.escalateWhy] ?? "").trim();
 
-  // -- Part 2 ---------------------------------------------------------------
+  // -- Step 3: deep dive (only the escalated signals) --------------------------
+  const analyses: Analysis[] = escalated.map((id) => {
+    const signal = SIGNALS.find((s) => s.id === id)!;
+    const rawArea = choices[R1.area(id)];
+    const area = rawArea ? (rawArea as AreaId) : null;
+    const rawHorizon = choices[R1.horizon(id)];
+    const horizon = rawHorizon === "short" || rawHorizon === "structural" ? (rawHorizon as Horizon) : null;
+    const approach = (notes[R1.approach(id)] ?? "").trim();
+
+    const signature = `${area ?? "-"}:${horizon ?? "-"}`;
+    const analysisChecks = Number(notes[R1.analysisChecks(id)] ?? "0") || 0;
+    const lastSig = notes[R1.analysisLastSig(id)] ?? "";
+    const fresh = analysisChecks > 0 && lastSig === signature;
+    const verdict: "holds" | "wrong" | null = !fresh
+      ? null
+      : area === signal.area && horizon === signal.horizon
+        ? "holds"
+        : "wrong";
+    const revealed = checks[R1.analysisReveal(id)] === true;
+
+    return {
+      signal,
+      triage: triageById(id),
+      area,
+      horizon,
+      approach,
+      checks: analysisChecks,
+      fresh,
+      verdict,
+      revealed,
+      reasoningVisible: verdict === "holds" || revealed,
+      complete: !!area && !!horizon && approach.length > 0,
+    };
+  });
+
+  const analysisById = (id: string) => analyses.find((a) => a.signal.id === id);
+  const analysisCompleteCount = analyses.filter((a) => a.complete).length;
+
+  // -- Part 2 -------------------------------------------------------------
   const revealedIds = seen[R1.revealed] ?? [];
   const rawTab = choices[R1.tab];
   const activeMeasure: MeasureId =
@@ -179,40 +249,31 @@ export function useRoute1() {
 
   // -- Missing list ---------------------------------------------------------
   // Standard #1: one entry per concretely-missing thing, named, in page order.
-  const openSignal = (id: string) => () => choose(R1.openSignal, id);
   const openTab = (id: MeasureId) => () => choose(R1.tab, id);
 
   const missingPartOne: MissingItem[] = [];
-  for (const f of findings) {
-    const who = `Signal ${f.signal.n} — ${f.signal.title}`;
-    if (!f.area) {
-      missingPartOne.push({
-        id: domId.area(f.signal.id),
-        label: `Area for ${who}`,
-        before: openSignal(f.signal.id),
-      });
-    }
-    if (!f.rootCause) {
-      missingPartOne.push({
-        id: domId.rootCause(f.signal.id),
-        label: `Root-cause tag for ${who}`,
-        before: openSignal(f.signal.id),
-      });
-    }
-    if (!f.horizon) {
-      missingPartOne.push({
-        id: domId.horizon(f.signal.id),
-        label: `Horizon tag for ${who}`,
-        before: openSignal(f.signal.id),
-      });
-    }
-    if (!f.approach) {
-      missingPartOne.push({
-        id: domId.approach(f.signal.id),
-        label: `Improvement approach for ${who}`,
-        before: openSignal(f.signal.id),
-      });
-    }
+  for (const t of triage) {
+    if (t.complete) continue;
+    const who = `Signal ${t.signal.n} — ${t.signal.title}`;
+    missingPartOne.push({
+      id: t.tag ? domId.triageEvidence(t.signal.id) : domId.triageTag(t.signal.id),
+      label: !t.tag && t.evidence === null ? `Triage for ${who} — tag and evidence` : !t.tag ? `Triage tag for ${who}` : `Triage evidence for ${who}`,
+    });
+  }
+  if (escalated.length < ESCALATE.limit) {
+    missingPartOne.push({
+      id: domId.escalate,
+      label: `Escalate ${ESCALATE.limit} signals for a deeper look — ${escalated.length} of ${ESCALATE.limit} chosen`,
+    });
+  }
+  if (!escalateWhy) {
+    missingPartOne.push({ id: domId.escalateWhy, label: "Justification for your two escalated signals" });
+  }
+  for (const a of analyses) {
+    const who = `Signal ${a.signal.n} — ${a.signal.title}`;
+    if (!a.area) missingPartOne.push({ id: domId.area(a.signal.id), label: `Area for ${who}` });
+    if (!a.horizon) missingPartOne.push({ id: domId.horizon(a.signal.id), label: `Horizon for ${who}` });
+    if (!a.approach) missingPartOne.push({ id: domId.approach(a.signal.id), label: `Improvement approach for ${who}` });
   }
 
   const missingPartTwo: MissingItem[] = [];
@@ -269,18 +330,29 @@ export function useRoute1() {
     hydrated,
     name,
 
-    // Part 1
-    findings,
-    reportRows,
-    assignedCount,
-    completeCount,
-    areaCorrectCount,
-    measurementCount,
-    architectureCount,
-    shortCount,
-    structuralCount,
+    // Step 1
+    triage,
+    triageById,
+    triageCompleteCount,
+    triageSignature,
+    triageChecks,
+    triageFresh,
+    triageLastOk,
+    triageAllHold,
+    triageClue,
+    triageRevealed,
+    triageRevealAt,
+    triageReasoningVisible,
     totalSignals: SIGNALS.length,
-    openSignalId: choices[R1.openSignal] || null,
+
+    // Step 2
+    escalated,
+    escalateWhy,
+
+    // Step 3
+    analyses,
+    analysisById,
+    analysisCompleteCount,
 
     // Part 2
     measureStates,

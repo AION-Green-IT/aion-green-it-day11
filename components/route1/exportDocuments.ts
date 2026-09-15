@@ -16,8 +16,10 @@ import type { Route1State } from "./useRoute1";
  *
  * Route 1 spans curriculum levels 1 and 2, so the document has a banner per
  * part and the JSON keeps `partOne` and `partTwo` as separate top-level blocks.
- * A grader reading one file can still score the diagnosis and the decision
- * independently; the learner still produced one deliverable.
+ * Part 1 itself has three steps — triage (all six), escalation (the two
+ * chosen and why), and the deep dive (only those two) — kept as three blocks
+ * so a grader can see the triage-level judgement separately from the depth of
+ * the analysis it led to.
  */
 
 const rootLabel = (id: string | null) => ROOT_CAUSES.find((r) => r.id === id)?.label ?? "—";
@@ -42,33 +44,55 @@ export function buildEngagementJson(r1: Route1State, filename: string): string {
     partOne: {
       label: EXPORT.partOne,
       level: 1,
-      signals: r1.reportRows.concat(r1.findings.filter((f) => !f.area)).map((f) => ({
-        id: f.signal.id,
-        n: f.signal.n,
-        title: f.signal.title,
-        signalText: f.signal.text,
-        areaSelected: f.area,
-        areaExpected: f.signal.area,
-        areaCorrect: f.area === f.signal.area,
-        rootCause: f.rootCause,
-        rootCauseExpected: f.signal.rootCause,
-        rootCauseCorrect: f.rootCause === f.signal.rootCause,
-        horizon: f.horizon,
-        horizonExpected: f.signal.horizon,
-        horizonCorrect: f.horizon === f.signal.horizon,
-        improvementApproach: f.approach,
-        checkAttempts: f.checkAttempts,
-        cluesUsed: f.clueUsed ? 1 : 0,
-        complete: f.complete,
+
+      triage: {
+        rows: r1.triage.map((t) => ({
+          id: t.signal.id,
+          n: t.signal.n,
+          title: t.signal.title,
+          signalText: t.signal.text,
+          tag: t.tag,
+          tagExpected: t.signal.rootCause,
+          evidenceIndex: t.evidence,
+          evidenceText: t.evidenceText,
+          holds: t.holds,
+        })),
+        checks: r1.triageChecks,
+        allHold: r1.triageAllHold,
+        clueUsed: r1.triageClue,
+        reasoningRevealed: r1.triageRevealed,
+        reasoningRevealedAtCheck: r1.triageRevealAt,
+      },
+
+      escalation: {
+        signalIds: r1.escalated,
+        justification: r1.escalateWhy,
+      },
+
+      analysis: r1.analyses.map((a) => ({
+        id: a.signal.id,
+        n: a.signal.n,
+        title: a.signal.title,
+        area: a.area,
+        areaExpected: a.signal.area,
+        areaCorrect: a.area === a.signal.area,
+        horizon: a.horizon,
+        horizonExpected: a.signal.horizon,
+        horizonCorrect: a.horizon === a.signal.horizon,
+        improvementApproach: a.approach,
+        checks: a.checks,
+        verdict: a.verdict,
+        reasoningRevealed: a.revealed,
+        complete: a.complete,
       })),
+
       tally: {
-        filed: r1.completeCount,
+        triaged: r1.triageCompleteCount,
         total: SIGNALS.length,
-        areaCorrect: r1.areaCorrectCount,
-        measurementGaps: r1.measurementCount,
-        architectureDecisions: r1.architectureCount,
-        shortTermVisible: r1.shortCount,
-        structural: r1.structuralCount,
+        measurementGaps: r1.triage.filter((t) => t.complete && t.tag === "measurement").length,
+        architectureDecisions: r1.triage.filter((t) => t.complete && t.tag === "architecture").length,
+        escalatedCount: r1.escalated.length,
+        analysedComplete: r1.analysisCompleteCount,
       },
     },
 
@@ -123,27 +147,34 @@ export function buildEngagementHtml(r1: Route1State): string {
     year: "numeric",
   });
 
-  const findingRows = r1.reportRows
+  const triageRows = r1.triage
     .map(
-      (f) => `<tr>
-      <td><strong>${f.signal.n}. ${esc(f.signal.title)}</strong><div class="muted">${esc(f.signal.source)}</div></td>
-      <td>${esc(areaLabel(f.area))}</td>
-      <td class="nowrap">${esc(rootLabel(f.rootCause))}</td>
-      <td class="nowrap">${esc(horizonLabel(f.horizon))}</td>
+      (t) => `<tr>
+      <td><strong>${t.signal.n}. ${esc(t.signal.title)}</strong><div class="muted">${esc(t.signal.source)}</div></td>
+      <td class="nowrap">${esc(rootLabel(t.tag))}</td>
+      <td>${t.evidenceText ? `&ldquo;${esc(t.evidenceText)}&rdquo;` : '<span class="muted">not tapped</span>'}</td>
+    </tr>`,
+    )
+    .join("");
+
+  const escalatedTitles = r1.escalated
+    .map((id) => r1.triageById(id))
+    .map((t) => `${t.signal.n}. ${esc(t.signal.title)}`)
+    .join(" and ");
+
+  const analysisRows = r1.analyses
+    .map(
+      (a) => `<tr>
+      <td><strong>${a.signal.n}. ${esc(a.signal.title)}</strong></td>
+      <td>${esc(areaLabel(a.area))}</td>
+      <td class="nowrap">${esc(horizonLabel(a.horizon))}</td>
     </tr>${
-      f.approach
-        ? `<tr class="why"><td colspan="4"><span class="muted">First step — </span>&ldquo;${esc(
-            f.approach,
-          )}&rdquo;</td></tr>`
+      a.approach
+        ? `<tr class="why"><td colspan="3"><span class="muted">First step — </span>&ldquo;${esc(a.approach)}&rdquo;</td></tr>`
         : ""
     }`,
     )
     .join("");
-
-  const unfiled = r1.findings.filter((f) => !f.area);
-  const unfiledBlock = unfiled.length
-    ? `<p class="muted">Not assigned: ${unfiled.map((f) => esc(f.signal.title)).join(", ")}.</p>`
-    : "";
 
   const measureBlocks = r1.measureStates
     .map(
@@ -246,25 +277,39 @@ export function buildEngagementHtml(r1: Route1State): string {
 
   <p class="part">${esc(EXPORT.partOne)}</p>
 
-  <h2>Findings</h2>
+  <h2>Triage — all six signals</h2>
+  <table>
+    <thead><tr><th>Signal</th><th>Root cause</th><th>Decisive evidence</th></tr></thead>
+    <tbody>${triageRows}</tbody>
+  </table>
+
+  <h2>Escalated for a deeper look</h2>
   ${
-    r1.reportRows.length
-      ? `<table>
-    <thead><tr><th>Signal</th><th>Area</th><th>Root cause</th><th>Horizon</th></tr></thead>
-    <tbody>${findingRows}</tbody>
-  </table>`
-      : `<p class="muted">No findings filed.</p>`
+    r1.escalated.length
+      ? `<p>${escalatedTitles || esc("—")}</p><p class="muted">${
+          r1.escalateWhy ? esc(r1.escalateWhy) : "No justification written."
+        }</p>`
+      : `<p class="muted">No signals escalated.</p>`
   }
-  ${unfiledBlock}
+
+  <h2>Deep-dive analysis</h2>
+  ${
+    r1.analyses.length
+      ? `<table>
+    <thead><tr><th>Signal</th><th>Area</th><th>Horizon</th></tr></thead>
+    <tbody>${analysisRows}</tbody>
+  </table>`
+      : `<p class="muted">No deep-dive analysis yet.</p>`
+  }
 
   <h2>Split</h2>
   <div class="summary">
-    <strong>${r1.completeCount} of ${r1.totalSignals} findings filed.</strong>
-    <span class="muted">${r1.measurementCount} measurement gap(s) · ${
-      r1.architectureCount
-    } architecture decision(s) · ${r1.shortCount} short-term visible · ${
-      r1.structuralCount
-    } structural.</span>
+    <strong>${r1.triageCompleteCount} of ${r1.totalSignals} signals triaged, ${r1.analysisCompleteCount} of ${
+      r1.escalated.length || 2
+    } escalated signals analysed.</strong>
+    <span class="muted">${r1.triage.filter((t) => t.complete && t.tag === "measurement").length} measurement gap(s) · ${
+      r1.triage.filter((t) => t.complete && t.tag === "architecture").length
+    } architecture decision(s) in the triage.</span>
   </div>
 
   <p class="part">${esc(EXPORT.partTwo)}</p>

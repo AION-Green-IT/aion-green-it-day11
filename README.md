@@ -11,7 +11,7 @@ material block with all of the teaching, one task, one export.
 
 | Route | Levels | Case | Material | Task | Export |
 |---|---|---|---|---|---|
-| `/route-1-diagnose-and-decide` | 1 + 2 | DataWeave Applications | S1–S5, ~60 min | Part 1 Diagnose (~15 min) → handover → Part 2 Decide (~15 min) | `1-{name}-day11-l1l2task1.json` + `.html` |
+| `/route-1-diagnose-and-decide` | 1 + 2 | DataWeave Applications | S1–S5, ~60 min | Part 1 Diagnose (~10 min: triage → escalate → deep dive) → handover → Part 2 Decide (~15 min) | `1-{name}-day11-l1l2task1.json` + `.html` |
 | `/route-2-management-decision` | 3 | MetricFlow Digital Systems GmbH (worked example) → NexLayer Digital Platforms (task) | A–D, ~60 min | Four exercises, ~20 min | `1-{name}-day11-l3task1.json` + `.html` |
 
 Neither route gates the other. Route 2 shows a soft order-suggestion banner until Route 1 has been
@@ -60,18 +60,25 @@ the day-local copy in [`UX-STANDARDS.md`](UX-STANDARDS.md) §12.
 - **S5 — Why monitoring and architecture are decided together.** The closing rule: a finding that
   does not reach a decision is a ticket; a decision that is not measured is a belief.
 
-**Part 1 — Diagnose.** Six signals in a signal bank. Each card opens inline into four steps: assign
-the area (Monitoring · Scaling · Data Flows · Architectural Principles · Management Logic · Team
-Priorities) with an on-demand Check that only says the area does not hold up and puts a directional
-clue behind one more click; tag the root cause (Measurement Gap / Architecture Decision); tag the
-horizon (Short-term visible / Structural); write the first concrete step. The report assembles on
-the right, and every line has an Edit button that reopens the card with its values intact. Ground
-truth, clues and a mentor answer key per signal (correct area, strongest wrong answer, load band,
-tag reasoning) live in `lib/route1/partOne.ts`.
+**Part 1 — Diagnose, in three steps (~10 min).** Six signals is too many to analyse in full inside
+the budget, so the route triages before it escalates:
 
-**Handover.** Inline, never a gate: the learner's own tally ("You filed 6 findings: 3 measurement
-gaps, 3 architecture decisions — 2 fixable in the short term, 4 needing structural anchoring"),
-two SVG split bars, and one carried line of teaching.
+1. **Triage all six** — tag the root cause (Measurement Gap / Architecture Decision) and tap the
+   phrase in the signal's own text that proves it. One set-level Check reports how many of the six
+   hold, never which ones (a two-way tag makes naming the wrong ones the answer). A clue marks the
+   decisive phrase in every signal at once; after two genuine checks, "Show the reasoning" opens —
+   recorded in the export.
+2. **Escalate two** for a deeper look, with a one-line justification. This is the level-1 skill
+   being tested — judging where a closer look pays off, not processing all six equally.
+3. **Deep dive on those two only** — area, horizon, first step, with a per-signal Check on area
+   and horizon together, the same two-checks-then-reveal pattern.
+
+Ground truth, decisive phrases, clues and a mentor answer key (per signal, plus a set-level key for
+the triage and for which pair is worth escalating) live in `lib/route1/partOne.ts`.
+
+**Handover.** Inline, never a gate: the learner's own triage split across all six signals
+("3 measurement gaps, 3 architecture decisions"), which two they escalated and the horizon split
+across those, two SVG split bars, and one carried line of teaching.
 
 **Part 2 — Decide.** Five constraints stated once, then three measures as tabs (A expand
 monitoring, B architecture review, C targeted optimisation). Per measure: a situational question
@@ -83,10 +90,11 @@ two follow-up decisions, two risks of the road not taken. The mentor key gives t
 answer (A coupled to a following architecture review) and states that a defended B or C is not
 marked wrong.
 
-**Export.** One JSON with `meta` (day, route, levels `[1,2]`, schema version), `partOne` (per
-signal: selected and expected area and tags, approach, check attempts, clue use; plus the tally)
-and `partTwo` (per measure: situational answer and correctness, prediction, ground truth, gaps,
-reveal state; plus the commit). One print-ready HTML report with a banner per part.
+**Export.** One JSON with `meta` (day, route, levels `[1,2]`, schema version), `partOne` (`triage`
+— all six rows plus check/clue/reveal metadata, `escalation` — the two chosen signal ids and the
+justification, `analysis` — the deep-dive workup on those two, and a `tally`) and `partTwo` (per
+measure: situational answer and correctness, prediction, ground truth, gaps, reveal state; plus the
+commit). One print-ready HTML report with a banner per part.
 
 ## Route 2 — Management Decision (MetricFlow → NexLayer)
 

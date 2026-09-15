@@ -2,16 +2,18 @@
 
 import { SectionHeading } from "@/components/ui/SectionHeading";
 import { LivePanel } from "@/components/ui/LivePanel";
-import { MaterialRefs } from "@/components/ui/MaterialRefs";
-import { EXPORT, PART_ONE, materialRefs } from "@/lib/route1";
-import { SignalCard } from "./SignalCard";
+import { EXPORT, PART_ONE } from "@/lib/route1";
+import { TriageBlock } from "./TriageBlock";
+import { EscalatePicker } from "./EscalatePicker";
+import { DeepDiveCard } from "./DeepDiveCard";
 import { ReportPanel } from "./ReportPanel";
 import { useRoute1, domId } from "./useRoute1";
 
 /**
- * Part 1 — Diagnose (level 1). Signal bank on the left, the report assembling
- * on the right, no gate at either end: the six signals can be worked in any
- * order, and Part 2 below is reachable whether or not they are finished.
+ * Part 1 — Diagnose (level 1). Three steps in one column: triage all six
+ * signals, escalate two, then the full workup on just those two. The report
+ * assembles on the right throughout, and Part 2 below is reachable regardless
+ * of how far Part 1 has got (CLAUDE.md #6).
  */
 export function PartOne() {
   const r1 = useRoute1();
@@ -24,21 +26,28 @@ export function PartOne() {
         intro={PART_ONE.framing}
       />
 
-      <MaterialRefs
-        refs={materialRefs(["monitoring", "load", "architecture"])}
-        lead="This part draws on"
-      />
-
       <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
-        <ul className="min-w-0 space-y-3">
-          {r1.findings.map((f) => (
-            <SignalCard key={f.signal.id} finding={f} />
-          ))}
-        </ul>
+        <div className="min-w-0 space-y-8">
+          <TriageBlock />
+          <EscalatePicker />
+
+          {r1.analyses.length > 0 && (
+            <div className="space-y-4">
+              <p className="text-micro font-semibold uppercase tracking-wide text-ash">
+                Step 3 · {r1.analyses.length} signal{r1.analyses.length === 1 ? "" : "s"} escalated
+              </p>
+              <div className="space-y-4">
+                {r1.analyses.map((a, i) => (
+                  <DeepDiveCard key={a.signal.id} analysis={a} position={i + 1} />
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
 
         <LivePanel
           title={`${EXPORT.docHeading} · ${EXPORT.partOne}`}
-          summary={`${r1.completeCount} of ${r1.totalSignals} findings filed`}
+          summary={`${r1.triageCompleteCount} of ${r1.totalSignals} triaged · ${r1.analysisCompleteCount} of ${r1.escalated.length || 2} analysed`}
         >
           <ReportPanel />
         </LivePanel>

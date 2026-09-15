@@ -386,3 +386,33 @@ Export filenames list every level a route covers: `1-jane-day11-l1l2task1` (Rout
 
 Canonical wording lives in `../CLAUDE.md` §12 and `../CURRICULUM-GUIDE.md` §2–§3. Days 1–10
 are not retrofitted.
+
+## 13. Triage-then-escalate on Route 1 Part 1 — new in Day 11
+
+**Why:** six signals × full workup (area + two tags + free text, each checked) ran 15–20 minutes,
+over the ~10-minute budget for Part 1 — and processing all six to equal depth isn't the level-1
+skill anyway; judging which two deserve a closer look is.
+
+**Shape, three steps:**
+
+1. `TriageBlock.tsx` — all six signals tagged (measurement gap / architecture decision) with a
+   *tapped phrase* from the signal's own text as evidence (`Signal.segments`, one `decisive: true`
+   per signal). One set-level check reports only how many rows hold. A clue marks every decisive
+   phrase at once. After two genuine checks, "Show the reasoning" opens per-row reasoning —
+   recorded in the export (`triage.reasoningRevealed`, `reasoningRevealedAtCheck`).
+2. `EscalatePicker.tsx` — exactly two signals chosen for a deeper look, plus a one-line
+   justification. Deselecting a signal keeps its deep-dive answers in the store; re-selecting it
+   restores them (CLAUDE.md #5).
+3. `DeepDiveCard.tsx` — full workup (area, horizon, first step) on only the two escalated
+   signals. Checked per signal (area+horizon together), same two-checks-then-reveal pattern.
+
+`useRoute1.ts` computes a **signature** per check scope (all six tags+evidence for triage; one
+signal's area+horizon for a deep dive) and compares it to the signature at the last check —
+`triageFresh` / a deep dive's `fresh` — so an edited-but-unchecked answer never shows a stale
+verdict.
+
+The handover (`Handover.tsx`) draws its root-cause split from the *triage* step (all six, honest
+to what the learner actually did) and a horizon split from the two escalated deep dives, plus
+naming which two were escalated.
+
+Canonical wording: `../CLAUDE.md` §13.

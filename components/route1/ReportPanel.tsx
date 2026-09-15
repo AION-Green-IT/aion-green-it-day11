@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { useProgress, useHydrated } from "@/lib/store";
+import { useHydrated } from "@/lib/store";
 import { scrollToAndFlash } from "@/lib/scrollToAndFlash";
 import { ENGAGEMENT, EXPORT, HORIZONS, R1, ROOT_CAUSES, areaById } from "@/lib/route1";
 import { useRoute1, domId } from "./useRoute1";
@@ -20,21 +20,15 @@ export function useReportDate() {
 }
 
 /**
- * Part 1 of the Engagement Report, assembling live as signals are filed.
- *
- * Every line carries an Edit button that reopens that signal's working panel
- * with all four values intact (CLAUDE.md #5) — the report is a view of the
- * learner's answers, never a second copy of them.
+ * Part 1 of the Engagement Report: the triage table for all six signals, then
+ * the two escalated ones with their full deep-dive workup. Every escalated row
+ * has an Edit button that scrolls to and flashes that signal's deep-dive card
+ * (CLAUDE.md #5) — the report is a view of the learner's answers, never a
+ * second copy of them.
  */
 export function ReportPanel() {
   const r1 = useRoute1();
-  const choose = useProgress((s) => s.choose);
   const date = useReportDate();
-
-  const edit = (signalId: string) => {
-    choose(R1.openSignal, signalId);
-    window.setTimeout(() => scrollToAndFlash(domId.signal(signalId), "ref"), 40);
-  };
 
   return (
     <div className="rounded-2xl border border-line bg-paper p-5">
@@ -47,63 +41,77 @@ export function ReportPanel() {
         {date ? ` · ${date}` : ""} · Case: {ENGAGEMENT.company}
       </p>
 
+      {/* Triage table */}
       <div className="mt-4">
-        <p className="text-micro font-semibold uppercase tracking-wide text-ash">Findings</p>
-        {r1.reportRows.length === 0 ? (
+        <p className="text-micro font-semibold uppercase tracking-wide text-ash">
+          Triage — {r1.triageCompleteCount} of {r1.totalSignals}
+        </p>
+        <ul className="mt-2 space-y-1.5">
+          {r1.triage.map((t) => (
+            <li key={t.signal.id} className="flex items-start gap-2 text-micro">
+              <span
+                className={clsx(
+                  "mt-0.5 shrink-0 rounded-full px-1.5 py-0.5 font-semibold",
+                  t.complete ? "bg-accentSoft text-accent" : "border border-line text-ash",
+                )}
+              >
+                S{t.signal.n}
+              </span>
+              <span className="min-w-0 text-ash">
+                <span className="text-ink">{t.signal.title}</span> — {rootLabel(t.tag)}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      {/* Escalated deep dives */}
+      <div className="mt-4 border-t border-line pt-4">
+        <p className="text-micro font-semibold uppercase tracking-wide text-ash">
+          Escalated &amp; analysed — {r1.analysisCompleteCount} of {r1.escalated.length || 2}
+        </p>
+        {r1.analyses.length === 0 ? (
           <p className="mt-2 rounded-xl border border-dashed border-line bg-canvas p-3 text-caption text-ash">
-            Assign an area to your first signal on the left and it appears here.
+            Choose two signals in Step 2 and their analysis appears here.
           </p>
         ) : (
           <ul className="mt-2 space-y-2">
-            {r1.reportRows.map((f) => (
-              <li key={f.signal.id} className="rounded-xl border border-line bg-canvas p-3">
+            {r1.analyses.map((a) => (
+              <li key={a.signal.id} className="rounded-xl border border-line bg-canvas p-3">
                 <div className="flex items-start justify-between gap-2">
                   <p className="text-caption font-semibold text-ink">
-                    {f.signal.n}. {f.signal.title}
+                    {a.signal.n}. {a.signal.title}
                   </p>
                   <span
                     className={clsx(
                       "shrink-0 rounded-full px-2 py-0.5 text-micro font-semibold",
-                      f.complete ? "bg-accentSoft text-accent" : "border border-line text-ash",
+                      a.complete ? "bg-accentSoft text-accent" : "border border-line text-ash",
                     )}
                   >
-                    {f.complete ? "filed" : "in progress"}
+                    {a.complete ? "filed" : "in progress"}
                   </span>
                 </div>
                 <dl className="mt-1.5 space-y-1 text-micro">
-                  <Row label="Area" value={f.area ? areaById(f.area).name : "— not assigned"} />
-                  <Row label="Root cause" value={rootLabel(f.rootCause)} />
-                  <Row label="Horizon" value={horizonLabel(f.horizon)} />
-                  {f.approach && (
+                  <Row label="Area" value={a.area ? areaById(a.area).name : "— not assigned"} />
+                  <Row label="Horizon" value={horizonLabel(a.horizon)} />
+                  {a.approach && (
                     <div className="pt-0.5">
                       <dt className="text-ash">First step</dt>
-                      <dd className="mt-0.5 italic text-ink">&ldquo;{f.approach}&rdquo;</dd>
+                      <dd className="mt-0.5 italic text-ink">&ldquo;{a.approach}&rdquo;</dd>
                     </div>
                   )}
                 </dl>
                 <button
                   type="button"
-                  onClick={() => edit(f.signal.id)}
+                  onClick={() => scrollToAndFlash(domId.analysis(a.signal.id), "ref")}
                   className="mt-2 text-micro font-semibold text-accent underline decoration-dotted underline-offset-2 hover:text-accentHi"
                 >
-                  Edit this finding
+                  Edit this analysis
                 </button>
               </li>
             ))}
           </ul>
         )}
-      </div>
-
-      <div className="mt-5 border-t border-line pt-4">
-        <p className="text-micro font-semibold uppercase tracking-wide text-ash">Split so far</p>
-        <p className="mt-1.5 text-caption text-ink">
-          <span className="font-semibold tabular-nums">{r1.completeCount}</span> of {r1.totalSignals}{" "}
-          findings filed
-        </p>
-        <p className="mt-1 text-micro text-ash">
-          {r1.measurementCount} measurement · {r1.architectureCount} architecture ·{" "}
-          {r1.shortCount} short-term · {r1.structuralCount} structural
-        </p>
       </div>
     </div>
   );

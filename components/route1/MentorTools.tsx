@@ -3,7 +3,15 @@
 import { useProgress } from "@/lib/store";
 import { MentorFillButton } from "@/components/ui/MentorFillButton";
 import { AnswerKeyButton } from "@/components/ui/AnswerKeyButton";
-import { COMMIT, DIMENSIONS, MEASURES, PREDICT_MAX, R1, SIGNALS } from "@/lib/route1";
+import {
+  COMMIT,
+  DIMENSIONS,
+  ESCALATE,
+  MEASURES,
+  PREDICT_MAX,
+  R1,
+  SIGNALS,
+} from "@/lib/route1";
 
 /**
  * The route's mentor bar: one demo auto-fill for the whole engagement plus the
@@ -11,10 +19,11 @@ import { COMMIT, DIMENSIONS, MEASURES, PREDICT_MAX, R1, SIGNALS } from "@/lib/ro
  * out of the way — a convenience gate against accidental clicks, not a security
  * boundary.
  *
- * One fill, both parts (CLAUDE.md #12): a mentor demonstrating the export
- * should not have to hunt for a second button halfway down the page. It calls
- * the store's raw actions for every persisted field the route writes, so it
- * exercises exactly the code path a learner does.
+ * One fill, everything (CLAUDE.md #12): triage all six with the correct tag and
+ * its decisive phrase, escalate the two recommended in the mentor key, run the
+ * deep dive on those two, then fill Part 2. It calls the store's raw actions
+ * for every persisted field the route writes, so it exercises exactly the code
+ * path a learner does.
  */
 export function MentorTools() {
   const setNote = useProgress((s) => s.setNote);
@@ -24,16 +33,30 @@ export function MentorTools() {
   const fill = () => {
     setNote(R1.name, "Muchson");
 
-    // -- Part 1: the six signals, filled with the expected answers -----------
+    // -- Step 1: triage all six with the correct tag and its decisive phrase --
     for (const s of SIGNALS) {
-      markSeen(R1.processed, s.id);
-      choose(R1.area(s.id), s.area);
-      choose(R1.rootCause(s.id), s.rootCause);
-      choose(R1.horizon(s.id), s.horizon);
-      setNote(R1.approach(s.id), s.sampleApproach);
+      choose(R1.triageTag(s.id), s.rootCause);
+      const decisiveIndex = s.segments.findIndex((seg) => typeof seg !== "string" && seg.decisive);
+      choose(R1.triageEvidence(s.id), String(decisiveIndex));
     }
 
-    // -- Part 2: the three measures -----------------------------------------
+    // -- Step 2: escalate the two the mentor key recommends most strongly ----
+    const escalate = ["s3", "s4"].slice(0, ESCALATE.limit);
+    setNote(R1.escalate, escalate.join("|"));
+    setNote(
+      R1.escalateWhy,
+      "Both are structural rather than short-term, and Signal 4 explains why findings like Signal 3 keep recurring in new services — together they argue from leverage rather than from what's easiest to fix.",
+    );
+
+    // -- Step 3: the deep dive on those two -----------------------------------
+    for (const id of escalate) {
+      const s = SIGNALS.find((sig) => sig.id === id)!;
+      choose(R1.area(id), s.area);
+      choose(R1.horizon(id), s.horizon);
+      setNote(R1.approach(id), s.sampleApproach);
+    }
+
+    // -- Part 2: the three measures --------------------------------------------
     // Predictions are deliberately *offset* from ground truth rather than equal
     // to it: the point of the reveal is the ghost-versus-real gap, and a fill
     // that matched perfectly would leave a mentor demonstrating a feature that

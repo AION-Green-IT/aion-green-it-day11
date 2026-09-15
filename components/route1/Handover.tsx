@@ -10,15 +10,24 @@ import { useRoute1, domId } from "./useRoute1";
  * The handover between the two parts.
  *
  * This is what makes the route one thing rather than two exercises printed in
- * sequence: it reads the learner's own findings back to them and turns the
- * question from "what is broken" into "what gets funded". It is never a gate —
- * Part 2 sits directly below and is reachable whether or not the six signals
- * are finished (CLAUDE.md #6); the button is convenience, not permission.
+ * sequence: it reads the learner's own triage and escalation choices back to
+ * them and turns the question from "what is broken" into "what gets funded".
+ * It is never a gate — Part 2 sits directly below and is reachable whether or
+ * not Part 1 is finished (CLAUDE.md #6); the button is convenience, not
+ * permission.
  */
 export function Handover() {
   const r1 = useRoute1();
-  const complete = r1.completeCount === r1.totalSignals;
-  const total = r1.completeCount;
+  const complete = r1.triageCompleteCount === r1.totalSignals && r1.analysisCompleteCount === r1.escalated.length && r1.escalated.length === 2;
+
+  const measurement = r1.triage.filter((t) => t.complete && t.tag === "measurement").length;
+  const architecture = r1.triage.filter((t) => t.complete && t.tag === "architecture").length;
+  const escalatedNames = r1.escalated.map((id) => {
+    const t = r1.triageById(id);
+    return `Signal ${t.signal.n}`;
+  });
+  const analysedShort = r1.analyses.filter((a) => a.complete && a.horizon === "short").length;
+  const analysedStructural = r1.analyses.filter((a) => a.complete && a.horizon === "structural").length;
 
   return (
     <section
@@ -54,22 +63,16 @@ export function Handover() {
           </p>
           <p className="mt-1 text-caption text-ink">
             {r1.hydrated
-              ? HANDOVER.tally(
-                  r1.measurementCount,
-                  r1.architectureCount,
-                  r1.shortCount,
-                  r1.structuralCount,
-                  total,
-                )
-              : HANDOVER.tally(0, 0, 0, 0, 0)}
+              ? HANDOVER.triageTally(measurement, architecture, r1.triageCompleteCount, r1.totalSignals)
+              : HANDOVER.triageTally(0, 0, 0, r1.totalSignals)}
+          </p>
+          <p className="mt-1.5 text-caption text-ink">
+            {r1.hydrated
+              ? HANDOVER.escalationTally(escalatedNames, analysedShort, analysedStructural, r1.analysisCompleteCount)
+              : HANDOVER.escalationTally([], 0, 0, 0)}
           </p>
 
-          <SplitBars
-            measurement={r1.measurementCount}
-            architecture={r1.architectureCount}
-            short={r1.shortCount}
-            structural={r1.structuralCount}
-          />
+          <SplitBars measurement={measurement} architecture={architecture} short={analysedShort} structural={analysedStructural} />
         </div>
 
         <p className="max-w-prose text-body text-ash">{HANDOVER.body}</p>
@@ -87,7 +90,7 @@ export function Handover() {
   );
 }
 
-/** Two stacked bars: the root-cause split and the horizon split of the learner's own findings. */
+/** Two stacked bars: the triage root-cause split (all six) and the horizon split (the escalated two). */
 function SplitBars({
   measurement,
   architecture,
@@ -101,12 +104,12 @@ function SplitBars({
 }) {
   const rows = [
     {
-      label: "Root cause",
+      label: "Root cause (triage)",
       left: { value: measurement, label: "Measurement gap", className: "fill-ash" },
       right: { value: architecture, label: "Architecture decision", className: "fill-ink" },
     },
     {
-      label: "Horizon",
+      label: "Horizon (escalated)",
       left: { value: short, label: "Short-term visible", className: "fill-accent/50" },
       right: { value: structural, label: "Structural", className: "fill-accent" },
     },

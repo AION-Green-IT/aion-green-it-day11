@@ -17,8 +17,9 @@ import { buildEngagementJson, buildEngagementHtml } from "./exportDocuments";
  *
  * Never disabled (CLAUDE.md #3): clicking while incomplete opens the itemized
  * missing list and jumps to the first gap — which may be several screens up in
- * Part 1, inside a collapsed signal card that the missing entry opens on its
- * way there.
+ * Part 1's triage table, the escalation picker, or a deep-dive card. Only the
+ * Part 2 measure tabs are ever collapsed, so only those entries carry a
+ * `before` callback to open the right tab first.
  */
 export function ExportBar() {
   const r1 = useRoute1();
@@ -59,8 +60,13 @@ export function ExportBar() {
           className="flex flex-wrap items-center gap-x-1.5 text-caption text-ash hover:text-ink"
         >
           <span>
-            <span className="tabular-nums font-semibold text-ink">{r1.completeCount}</span> /{" "}
-            {r1.totalSignals} findings filed
+            <span className="tabular-nums font-semibold text-ink">{r1.triageCompleteCount}</span> /{" "}
+            {r1.totalSignals} triaged
+          </span>
+          <span className="text-ash">·</span>
+          <span>
+            <span className="tabular-nums font-semibold text-ink">{r1.analysisCompleteCount}</span> /{" "}
+            {r1.escalated.length || 2} analysed
           </span>
           <span className="text-ash">·</span>
           <span>

@@ -27,25 +27,40 @@ export const LEARNER_NAME_KEY = "learner:name";
 export const R1 = {
   name: LEARNER_NAME_KEY,
 
-  // -- Part 1: diagnose -----------------------------------------------------
+  // -- Part 1, Step 1: triage (all six) --------------------------------------
+  triageTag: (signalId: string) => `r1:triage:tag:${signalId}`,
+  /** Index into the signal's `segments` array of the phrase the learner tapped. */
+  triageEvidence: (signalId: string) => `r1:triage:ev:${signalId}`,
+  /** Stringified count of "Check my triage" presses — exported for grading. */
+  triageChecks: "r1:triage:checks",
+  /** The triage signature (every row's tag+evidence) as of the last check, to detect a stale result. */
+  triageLastSig: "r1:triage:lastsig",
+  /** How many rows held as of the last check. */
+  triageLastOk: "r1:triage:lastok",
+  /** toggleCheck: the clue (every decisive phrase marked) has been opened. */
+  triageClue: "r1:triage:clue",
+  /** toggleCheck: "Show the reasoning" was used, after two genuine checks. */
+  triageReveal: "r1:triage:reveal",
+  /** How many checks had been made when the reasoning was revealed — exported for grading. */
+  triageRevealAt: "r1:triage:revealat",
+
+  // -- Part 1, Step 2: escalate ----------------------------------------------
+  /** The two escalated signal ids, joined with "|" — the store holds no arrays. */
+  escalate: "r1:escalate",
+  escalateWhy: "r1:escalate:why",
+
+  // -- Part 1, Step 3: deep dive (the two escalated signals only) -----------
   area: (signalId: string) => `r1:area:${signalId}`,
-  rootCause: (signalId: string) => `r1:root:${signalId}`,
   horizon: (signalId: string) => `r1:horizon:${signalId}`,
   approach: (signalId: string) => `r1:approach:${signalId}`,
-  /** Stringified count of Check presses on a signal — exported for grading. */
-  checks: (signalId: string) => `r1:checks:${signalId}`,
-  /** markSeen bucket: signals whose clue was opened at least once. */
+  /** Stringified count of Check presses on one deep-dive signal — exported for grading. */
+  analysisChecks: (signalId: string) => `r1:an:checks:${signalId}`,
+  /** The area:horizon signature as of that signal's last check, to detect staleness. */
+  analysisLastSig: (signalId: string) => `r1:an:lastsig:${signalId}`,
+  /** markSeen bucket: signals whose deep-dive clue was opened at least once. */
   clues: "r1:clues",
-  /** markSeen bucket: the order signals were first given an area. */
-  processed: "r1:processed",
-
-  /**
-   * Which signal card is expanded. Persisted rather than component-local so a
-   * missing-item click can open the right card before scrolling to a field
-   * inside it — a missing entry that lands on a collapsed panel is a dead
-   * click, which CLAUDE.md #2 does not allow.
-   */
-  openSignal: "r1:open",
+  /** toggleCheck per signal: "Show the reasoning" was used, after two genuine checks. */
+  analysisReveal: (signalId: string) => `r1:an:reveal:${signalId}`,
 
   // -- Part 2: decide -------------------------------------------------------
   situational: (measureId: string) => `r1:sit:${measureId}`,
@@ -58,17 +73,19 @@ export const R1 = {
   feasibility: "r1:feasibility",
   followUp: (n: 1 | 2) => `r1:followup:${n}`,
   risk: (n: 1 | 2) => `r1:risk:${n}`,
-  /** Which measure tab is open — persisted for the same reason as openSignal. */
+  /** Which measure tab is open — persisted so a missing-item click can open it first. */
   tab: "r1:tab",
 } as const;
 
 /** Prefixes resetSection() must sweep to clear every compound key this route writes. */
 export const R1_KEY_PREFIXES = [
+  "r1:triage:",
+  "r1:escalate",
   "r1:area:",
-  "r1:root:",
   "r1:horizon:",
   "r1:approach:",
-  "r1:checks:",
+  "r1:an:",
+  "r1:clues",
   "r1:sit:",
   "r1:pred:",
   "r1:pick",
@@ -76,7 +93,6 @@ export const R1_KEY_PREFIXES = [
   "r1:feasibility",
   "r1:followup:",
   "r1:risk:",
-  "r1:open",
   "r1:tab",
 ];
 
@@ -108,17 +124,29 @@ export const NAME_FIELD = {
  * The handover between the two parts. Inline, small, and built from the
  * learner's own answers — Part 2 has to read as caused by Part 1, not merely
  * printed after it (CLAUDE.md #12). It is never a gate: Part 2 is reachable
- * whether or not the six signals are finished.
+ * whether or not Part 1 is finished.
+ *
+ * Two figures, both the learner's own: the root-cause split across all six
+ * triaged signals, and the horizon split across whichever of the two escalated
+ * signals have a completed deep dive.
  */
 export const HANDOVER = {
   id: "r1-handover",
   kicker: "Handover",
   heading: "You now know what is wrong.",
   body: "Leadership does not fund diagnoses — it funds measures. The next question is not what is broken, it is what to spend the quarter on.",
-  tally: (measurement: number, architecture: number, short: number, structural: number, total: number) =>
-    total === 0
-      ? "No findings filed yet — the split below fills in as you work through the six signals."
-      : `You filed ${total} finding${total === 1 ? "" : "s"}: ${measurement} measurement gap${measurement === 1 ? "" : "s"}, ${architecture} architecture decision${architecture === 1 ? "" : "s"} — ${short} fixable in the short term, ${structural} needing structural anchoring.`,
+  triageTally: (measurement: number, architecture: number, tagged: number, total: number) =>
+    tagged === 0
+      ? "No signals triaged yet — the split below fills in as you work through Step 1."
+      : `Across ${tagged} of ${total} triaged signals: ${measurement} measurement gap${measurement === 1 ? "" : "s"}, ${architecture} architecture decision${architecture === 1 ? "" : "s"}.`,
+  escalationTally: (names: string[], short: number, structural: number, analysed: number) =>
+    names.length === 0
+      ? "You have not escalated any signals yet."
+      : `You escalated ${names.join(" and ")}. ${
+          analysed === 0
+            ? "Neither has a completed deep dive yet."
+            : `${short} short-term visible, ${structural} structural, among the ${analysed} you've completed.`
+        }`,
   cta: "Continue to Part 2",
 } as const;
 
